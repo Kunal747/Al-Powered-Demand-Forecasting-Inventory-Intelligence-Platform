@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.streamlit/
+data/foresight.db
+data/foresight_sales_inventory_clean.csv
+.DS_Store

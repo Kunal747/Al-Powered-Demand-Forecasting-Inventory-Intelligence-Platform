@@ -1,0 +1,26 @@
+SKU_ID,SKU_Name,Category,Unit_Price,Lead_Time_Days,Reorder_Level
+SKU1001,Electronics_Item_1,Electronics,1946.19,14,46
+SKU1002,Electronics_Item_2,Electronics,2153.56,4,61
+SKU1003,Electronics_Item_3,Electronics,280.73,12,78
+SKU1004,Electronics_Item_4,Electronics,1914.79,15,67
+SKU1005,Electronics_Item_5,Electronics,363.88,18,47
+SKU1006,Grocery_Item_1,Grocery,958.46,6,75
+SKU1007,Grocery_Item_2,Grocery,1627.47,10,69
+SKU1008,Grocery_Item_3,Grocery,1136.36,11,33
+SKU1009,Grocery_Item_4,Grocery,1408.73,18,23
+SKU1010,Grocery_Item_5,Grocery,2077.7,7,57
+SKU1011,Apparel_Item_1,Apparel,1907.31,15,41
+SKU1012,Apparel_Item_2,Apparel,2428.21,11,73
+SKU1013,Apparel_Item_3,Apparel,1957.04,16,31
+SKU1014,Apparel_Item_4,Apparel,1193.47,11,22
+SKU1015,Apparel_Item_5,Apparel,428.01,16,60
+SKU1016,Home_Item_1,Home & Kitchen,1874.67,9,78
+SKU1017,Home_Item_2,Home & Kitchen,848.27,19,42
+SKU1018,Home_Item_3,Home & Kitchen,1200.41,17,31
+SKU1019,Home_Item_4,Home & Kitchen,368.31,15,48
+SKU1020,Home_Item_5,Home & Kitchen,605.93,13,60
+SKU1021,Beauty_Item_1,Beauty,1121.02,5,69
+SKU1022,Beauty_Item_2,Beauty,1765.65,4,38
+SKU1023,Beauty_Item_3,Beauty,2089.04,10,68
+SKU1024,Beauty_Item_4,Beauty,999.32,19,37
+SKU1025,Beauty_Item_5,Beauty,1722.11,14,28

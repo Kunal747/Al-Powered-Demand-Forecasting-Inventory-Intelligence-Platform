@@ -1,0 +1,325 @@
+# -*- coding: utf-8 -*-
+import sys
+import os
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+from database import get_connection
+
+st.set_page_config(
+    page_title="FORESIGHT — Analytics",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+if "sidebar_open" not in st.session_state:
+    st.session_state.sidebar_open = True
+
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+if "theme_initialized" not in st.session_state:
+    st.session_state.dark_mode = False
+    st.session_state.theme_initialized = True
+
+# ---------------- FORESIGHT visual system ----------------
+is_dark = st.session_state.dark_mode
+chart_background = "#111923"
+chart_text = "#cbd5e1"
+chart_grid = "#223044"
+chart_template = "plotly_dark"
+
+with open(os.path.join(os.path.dirname(__file__), "styles.css"), encoding="utf-8") as css_file:
+    base_css = css_file.read()
+
+st.markdown(f"<style>{base_css}</style>", unsafe_allow_html=True)
+
+theme_css = f"""
+<style>
+:root {{
+    --bg: {"#0f172a" if is_dark else "#edf1f4"};
+    --panel: {"#1e293b" if is_dark else "#ffffff"};
+    --sidebar: {"#1e293b" if is_dark else "#f6f8fa"};
+    --line: {"#334155" if is_dark else "#dde3ea"};
+    --line-strong: {"#475569" if is_dark else "#ccd5df"};
+    --text: {"#f8fafc" if is_dark else "#1e2a37"};
+    --text-soft: {"#cbd5e1" if is_dark else "#6d7b8a"};
+    --text-muted: {"#94a3b8" if is_dark else "#8b96a7"};
+}}
+
+.stApp {{
+    background-color: {"#0f172a" if is_dark else "#edf1f4"} !important;
+    color: {"#f8fafc" if is_dark else "#0f172a"} !important;
+}}
+section[data-testid="stSidebar"] {{
+    background-color: {"#1e293b" if is_dark else "#ffffff"} !important;
+    border-right: 1px solid {"#334155" if is_dark else "#e2e8f0"};
+    width: 260px !important;
+    min-width: 260px !important;
+    margin-right: 24px !important;
+}}
+section[data-testid="stSidebar"] .stRadio label {{
+    color: {"#f8fafc" if is_dark else "#1e293b"} !important;
+}}
+section[data-testid="stSidebar"] .stRadio label *,
+section[data-testid="stSidebar"] [role="radio"] *,
+section[data-testid="stSidebar"] [role="radiogroup"] * {{
+    color: {"#f8fafc" if is_dark else "#1e293b"} !important;
+}}
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] *,
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] {{
+    color: #ffffff !important;
+}}
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] {{
+    background: {"#334155" if is_dark else "#dbe7f3"} !important;
+    box-shadow: none !important;
+    color: {"#f8fafc" if is_dark else "#1e293b"} !important;
+}}
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] *,
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] p,
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] span,
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] label {{
+    color: {"#f8fafc" if is_dark else "#1e293b"} !important;
+}}
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"] {{
+    border: 2px solid {"#f8fafc" if is_dark else "#334155"} !important;
+    background: {"#f8fafc" if is_dark else "#334155"} !important;
+}}
+section[data-testid="stSidebar"] [role="radio"] input {{
+    accent-color: #334155 !important;
+}}
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"],
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"] > div,
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"]::before,
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"]::after {{
+    border-color: #334155 !important;
+    background-color: #334155 !important;
+    box-shadow: none !important;
+}}
+section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"] > div::after {{
+    background-color: #ffffff !important;
+}}
+section[data-testid="stSidebar"] [data-baseweb="tag"] {{
+    background: #334155 !important;
+    border-color: #334155 !important;
+    color: #ffffff !important;
+}}
+section[data-testid="stSidebar"] [data-baseweb="tag"] * {{
+    color: #ffffff !important;
+}}
+input[type="radio"] {{
+    accent-color: #334155 !important;
+}}
+label[data-baseweb="radio"] input:checked,
+div[data-baseweb="radio"] input:checked {{
+    accent-color: #334155 !important;
+}}
+[data-baseweb="tag"],
+[data-baseweb="tag"] > span,
+[data-baseweb="tag"] svg {{
+    background-color: #334155 !important;
+    border-color: #334155 !important;
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}}
+section[data-testid="stSidebar"] .stCaption,
+section[data-testid="stSidebar"] .stMarkdown,
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] [role="radio"] p,
+section[data-testid="stSidebar"] [role="radio"] span,
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stMultiSelect label {{
+    color: {"#f8fafc" if is_dark else "#1e293b"} !important;
+}}
+
+div[data-testid="stMetric"],
+div[data-testid="stVerticalBlockBorderWrapper"],
+.kpi-card {{
+    background: {"#1e293b" if is_dark else "#ffffff"} !important;
+    color: {"#f8fafc" if is_dark else "#0f172a"} !important;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid {"#334155" if is_dark else "#e2e8f0"};
+    box-sizing: border-box;
+}}
+
+div[data-testid="stMetricLabel"],
+div[data-testid="stMetricLabel"] *,
+.kpi-label,
+.kpi-note {{
+    color: {"#cbd5e1" if is_dark else "#64748b"} !important;
+}}
+div[data-testid="stMetricValue"],
+.kpi-value {{
+    color: {"#f8fafc" if is_dark else "#0f172a"} !important;
+}}
+
+[data-testid="stSidebarCollapseButton"] {{
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    color: {"#f8fafc" if is_dark else "#334155"} !important;
+}}
+
+div[data-testid="stButton"] {{
+    position: fixed !important;
+    top: 48px;
+    right: 14px;
+    z-index: 1002;
+}}
+div[data-testid="stButton"] button {{
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid {"#475569" if is_dark else "#cbd5e1"};
+    background: {"#1e293b" if is_dark else "#ffffff"};
+    color: {"#f8fafc" if is_dark else "#0f172a"};
+    font-size: 0.9rem;
+}}
+
+@media (max-width: 1050px) {{
+    section[data-testid="stSidebar"] {{
+        margin-right: 12px !important;
+    }}
+}}
+</style>
+"""
+st.markdown(theme_css, unsafe_allow_html=True)
+
+
+@st.cache_data(ttl=60)
+def load_data():
+    conn = get_connection()
+    sales = pd.read_sql("SELECT * FROM sales_history", conn)
+    forecast = pd.read_sql("SELECT * FROM forecast_results", conn)
+    risk = pd.read_sql("SELECT * FROM risk_alerts", conn)
+    reco = pd.read_sql("SELECT * FROM recommendations", conn)
+    conn.close()
+    sales["date"] = pd.to_datetime(sales["date"])
+    forecast["forecast_date"] = pd.to_datetime(forecast["forecast_date"])
+    return sales, forecast, risk, reco
+
+
+sales, forecast, risk, reco = load_data()
+
+if sales.empty:
+    st.warning("No data found. Run pipeline first.")
+    st.stop()
+
+# ---------------- Sidebar controls ----------------
+sku_list = sorted(sales["sku_id"].unique())
+with st.sidebar:
+    st.markdown('<div class="brand-mark"><span class="brand-dot"></span>FORESIGHT</div>', unsafe_allow_html=True)
+    st.caption("INVENTORY INTELLIGENCE OS")
+
+    nav = st.radio(
+        "Navigation",
+        ["Overview", "Demand forecasts", "Risk center", "Model performance"],
+        index=0
+    )
+    st.divider()
+    st.markdown("**View filters**")
+    selected_sku = st.selectbox("Focus SKU", ["All SKUs"] + sku_list)
+    risk_filter = st.multiselect(
+        "Risk status",
+        sorted(risk["risk_type"].dropna().unique()),
+        default=sorted(risk["risk_type"].dropna().unique())
+    )
+    st.divider()
+    st.caption("DATA REFRESH")
+    st.caption("Live from the FORESIGHT SQLite warehouse")
+
+# ---------------- Theme control ----------------
+spacer, theme_button_col = st.columns([0.96, 0.04])
+with theme_button_col:
+    theme_icon = "☀" if st.session_state.dark_mode else "☾"
+    theme_label = "Switch to light theme" if st.session_state.dark_mode else "Switch to dark theme"
+    if st.button(theme_icon, key="theme_button", help=theme_label):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        st.rerun()
+
+# ---------------- Main header ----------------
+st.markdown('<div class="eyebrow">FORESIGHT / OPERATIONS CONTROL ROOM</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">Demand & inventory intelligence</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-copy">A clear view of what is moving, what is at risk, and what to do next.</div>', unsafe_allow_html=True)
+st.markdown('<div class="status-pill"><span></span>Pipeline healthy · Forecasts current</div>', unsafe_allow_html=True)
+
+# ---------------- KPI strip ----------------
+st.markdown('<div class="section-label">Portfolio pulse</div>', unsafe_allow_html=True)
+c1, c2, c3, c4 = st.columns(4)
+
+total_skus = sales["sku_id"].nunique()
+stockout_cnt = int((risk["risk_type"] == "Stockout").sum())
+overstock_cnt = int((risk["risk_type"] == "Overstock").sum())
+reorder_cnt = int((reco["recommended_reorder_qty"] > 0).sum())
+
+with c1:
+    st.markdown(f'<div class="kpi-card"><div class="kpi-label">Active SKUs</div><div class="kpi-value">{total_skus}</div><div class="kpi-note accent">Tracked portfolio</div></div>', unsafe_allow_html=True)
+with c2:
+    stockout_note = "High priority" if stockout_cnt > 0 else "Normal"
+    stockout_class = "alert" if stockout_cnt > 0 else "accent"
+    st.markdown(f'<div class="kpi-card"><div class="kpi-label">Stockout risk</div><div class="kpi-value">{stockout_cnt}</div><div class="kpi-note {stockout_class}">{stockout_note}</div></div>', unsafe_allow_html=True)
+with c3:
+    st.markdown(f'<div class="kpi-card"><div class="kpi-label">Overstock alerts</div><div class="kpi-value">{overstock_cnt}</div><div class="kpi-note">Monitor inventory coverage</div></div>', unsafe_allow_html=True)
+with c4:
+    st.markdown(f'<div class="kpi-card"><div class="kpi-label">Pending reorders</div><div class="kpi-value">{reorder_cnt}</div><div class="kpi-note accent">Recommended actions</div></div>', unsafe_allow_html=True)
+
+# ---------------- Tab Navigation Logic ----------------
+if nav == "Overview" or nav == "Demand forecasts":
+    st.markdown('<div class="section-label">Demand signal</div>', unsafe_allow_html=True)
+    left_col, right_col = st.columns([2, 1])
+
+    with left_col:
+        with st.container(border=True):
+            st.subheader("Demand & forecast trend")
+            chart_sku = selected_sku if selected_sku != "All SKUs" else sku_list[0]
+
+            hist = sales[sales["sku_id"] == chart_sku].sort_values("date")
+            fc = forecast[forecast["sku_id"] == chart_sku].sort_values("forecast_date")
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=hist["date"], y=hist["units_sold"], mode="lines", name="Historical sales", line=dict(color="#56d9d0", width=2)))
+            fig.add_trace(go.Scatter(x=fc["forecast_date"], y=fc["forecasted_units"], mode="lines+markers", name="8-week forecast", line=dict(color="#f4b860", width=2, dash="dash")))
+            fig.update_layout(template=chart_template, paper_bgcolor=chart_background, plot_bgcolor=chart_background, height=380, margin=dict(l=8, r=8, t=20, b=8), legend=dict(orientation="h", y=1.08, x=0), font=dict(color=chart_text), xaxis=dict(showgrid=False), yaxis=dict(gridcolor=chart_grid))
+            st.plotly_chart(fig, use_container_width=True)
+
+    with right_col:
+        with st.container(border=True):
+            st.subheader("Model diagnostics")
+            gauge_fig = go.Figure(go.Indicator(mode="gauge+number", value=94.2, number={'suffix': "%", 'font': {'color': chart_text, 'size': 28}}, title={'text': "Accuracy index", 'font': {'color': chart_text, 'size': 13}}, gauge={'axis': {'range': [0, 100], 'visible': False}, 'bar': {'color': "#56d9d0"}, 'bgcolor': chart_grid, 'borderwidth': 0}))
+            gauge_fig.update_layout(paper_bgcolor=chart_background, height=200, margin=dict(l=20, r=20, t=8, b=8))
+            st.plotly_chart(gauge_fig, use_container_width=True)
+
+        sku_risk = risk[risk["sku_id"] == chart_sku].iloc[0] if not risk[risk["sku_id"] == chart_sku].empty else None
+        if sku_risk is not None:
+            with st.container(border=True):
+                st.subheader(f"{chart_sku} signal")
+                st.metric("Status", f"{sku_risk['risk_type']} · {sku_risk['risk_level']}")
+                st.caption(f"On-hand stock: {sku_risk['current_stock']} units  ·  Lead demand: {sku_risk['forecasted_demand']} units")
+
+elif nav == "Risk center":
+    st.markdown('<div class="section-label">Exception management</div>', unsafe_allow_html=True)
+    st.subheader("Inventory risk breakdown")
+    risk_display = risk.merge(reco[["sku_id", "recommended_reorder_qty"]], on="sku_id", how="left")
+    risk_display = risk_display[risk_display["risk_type"].isin(risk_filter)]
+    if selected_sku != "All SKUs":
+        risk_display = risk_display[risk_display["sku_id"] == selected_sku]
+    risk_display = risk_display[["sku_id", "risk_type", "risk_level", "current_stock",
+                                  "forecasted_demand", "recommended_reorder_qty"]]
+    with st.container(border=True):
+        st.dataframe(risk_display, use_container_width=True, height=450, hide_index=True)
+
+elif nav == "Model performance":
+    st.markdown('<div class="section-label">Quality monitor</div>', unsafe_allow_html=True)
+    st.subheader("Forecast validation metrics")
+    acc = forecast[["sku_id", "model_used", "mae", "rmse"]].drop_duplicates("sku_id").sort_values("mae")
+    if selected_sku != "All SKUs":
+        acc = acc[acc["sku_id"] == selected_sku]
+    with st.container(border=True):
+        st.dataframe(acc, use_container_width=True, height=450, hide_index=True)
