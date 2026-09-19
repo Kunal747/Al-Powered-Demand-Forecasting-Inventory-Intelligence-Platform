@@ -149,28 +149,78 @@ st.markdown(theme_css, unsafe_allow_html=True)
 
 @st.cache_data(ttl=60)
 def load_data():
-    try:
-        conn = get_connection()
-        sales = pd.read_sql("SELECT * FROM sales_history", conn)
-        forecast = pd.read_sql("SELECT * FROM forecast_results", conn)
-        risk = pd.read_sql("SELECT * FROM risk_alerts", conn)
-        reco = pd.read_sql("SELECT * FROM recommendations", conn)
-        conn.close()
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sales_history';")
+    if not cursor.fetchone():
+        cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS sales_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL, sku_id TEXT NOT NULL, sku_name TEXT,
+            category TEXT, region TEXT, units_sold REAL, unit_price REAL,
+            current_stock REAL, reorder_level REAL, lead_time_days INTEGER,
+            promotion_flag INTEGER, revenue REAL
+        );
+        CREATE TABLE IF NOT EXISTS forecast_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku_id TEXT NOT NULL, forecast_date TEXT NOT NULL,
+            forecasted_units REAL, model_used TEXT, mae REAL, rmse REAL, generated_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS risk_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku_id TEXT NOT NULL, as_of_date TEXT, current_stock REAL,
+            forecasted_demand REAL, risk_type TEXT, risk_level TEXT
+        );
+        CREATE TABLE IF NOT EXISTS recommendations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku_id TEXT NOT NULL, as_of_date TEXT, recommended_reorder_qty REAL,
+            safety_stock REAL, reasoning TEXT
+        );
+        """)
+        conn.commit()
+
+    cursor.execute("SELECT COUNT(*) FROM sales_history;")
+    count = cursor.fetchone()[0]
+    
+    if count == 0:
+        csv_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "data", "foresight_sales_inventory_clean.csv"),
+            "data/foresight_sales_inventory_clean.csv",
+            "foresight_sales_inventory_clean.csv"
+        ]
+        for path in csv_paths:
+            if os.path.exists(path):
+                df = pd.read_csv(path)
+                df = df.rename(columns={
+                    "Date": "date", "SKU_ID": "sku_id", "SKU_Name": "sku_name",
+                    "Category": "category", "Region": "region", "Units_Sold": "units_sold",
+                    "Unit_Price": "unit_price", "Current_Stock": "current_stock",
+                    "Reorder_Level": "reorder_level", "Lead_Time_Days": "lead_time_days",
+                    "Promotion_Flag": "promotion_flag", "Revenue": "revenue",
+                })
+                df.to_sql("sales_history", conn, if_exists="append", index=False)
+                conn.commit()
+                break
+
+    sales = pd.read_sql("SELECT * FROM sales_history", conn)
+    forecast = pd.read_sql("SELECT * FROM forecast_results", conn)
+    risk = pd.read_sql("SELECT * FROM risk_alerts", conn)
+    reco = pd.read_sql("SELECT * FROM recommendations", conn)
+    conn.close()
+    
+    if not sales.empty and "date" in sales.columns:
+        sales["date"] = pd.to_datetime(sales["date"])
+    if not forecast.empty and "forecast_date" in forecast.columns:
+        forecast["forecast_date"] = pd.to_datetime(forecast["forecast_date"])
         
-        if not sales.empty and "date" in sales.columns:
-            sales["date"] = pd.to_datetime(sales["date"])
-        if not forecast.empty and "forecast_date" in forecast.columns:
-            forecast["forecast_date"] = pd.to_datetime(forecast["forecast_date"])
-            
-        return sales, forecast, risk, reco
-    except Exception as e:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    return sales, forecast, risk, reco
 
 
 sales, forecast, risk, reco = load_data()
 
 if sales.empty:
-    st.warning("⚠️ Database tables are missing or empty. Please ensure `src/database.py` has run and populated data.")
+    st.warning("⚠️ No data available in sales_history. Please check if the CSV file exists in the repository.")
     st.stop()
 
 # ---------------- Sidebar controls ----------------
