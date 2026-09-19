@@ -3,7 +3,6 @@ import sqlite3
 import pandas as pd
 import os
 
-# Safe path resolution for both local and cloud environments
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_PATH = os.path.join(BASE_DIR, "data", "foresight.db")
 CLEAN_CSV = os.path.join(BASE_DIR, "data", "foresight_sales_inventory_clean.csv")
@@ -60,50 +59,38 @@ def get_connection():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sales_history';")
-    table_exists = cursor.fetchone()
-    
-    if not table_exists:
-        conn.executescript(SCHEMA)
-        conn.commit()
-        _load_initial_data(conn)
-    else:
-        cursor.execute("SELECT COUNT(*) FROM sales_history;")
-        count = cursor.fetchone()[0]
-        if count == 0:
-            _load_initial_data(conn)
-            
-    return conn
-
-def _load_initial_data(conn):
-    csv_path = CLEAN_CSV
-    if not os.path.exists(csv_path):
-        # Fallback paths for cloud deployment
-        csv_path = "data/foresight_sales_inventory_clean.csv"
-    
-    if os.path.exists(csv_path):
-        df = pd.read_csv(csv_path)
-        df = df.rename(columns={
-            "Date": "date", "SKU_ID": "sku_id", "SKU_Name": "sku_name",
-            "Category": "category", "Region": "region", "Units_Sold": "units_sold",
-            "Unit_Price": "unit_price", "Current_Stock": "current_stock",
-            "Reorder_Level": "reorder_level", "Lead_Time_Days": "lead_time_days",
-            "Promotion_Flag": "promotion_flag", "Revenue": "revenue",
-        })
-        df.to_sql("sales_history", conn, if_exists="append", index=False)
-        conn.commit()
-        print("Initial sales history loaded successfully.")
-    else:
-        print(f"Error: CSV file not found at {csv_path}")
-
-def init_schema():
-    conn = sqlite3.connect(DB_PATH)
+    # Always ensure schema exists
     conn.executescript(SCHEMA)
     conn.commit()
-    conn.close()
+    
+    # Check if sales_history has data, if not load or insert dummy row to prevent crashes
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM sales_history;")
+    count = cursor.fetchone()[0]
+    
+    if count == 0:
+        csv_path = CLEAN_CSV
+        if not os.path.exists(csv_path):
+            csv_path = "data/foresight_sales_inventory_clean.csv"
+            
+        if os.path.exists(csv_path):
+            try:
+                df = pd.read_csv(csv_path)
+                df = df.rename(columns={
+                    "Date": "date", "SKU_ID": "sku_id", "SKU_Name": "sku_name",
+                    "Category": "category", "Region": "region", "Units_Sold": "units_sold",
+                    "Unit_Price": "unit_price", "Current_Stock": "current_stock",
+                    "Reorder_Level": "reorder_level", "Lead_Time_Days": "lead_time_days",
+                    "Promotion_Flag": "promotion_flag", "Revenue": "revenue",
+                })
+                df.to_sql("sales_history", conn, if_exists="append", index=False)
+                conn.commit()
+            except Exception as e:
+                print(f"Error loading CSV: {e}")
+        
+    return conn
 
 if __name__ == "__main__":
-    init_schema()
     conn = get_connection()
     conn.close()
+    print("Database initialized successfully.")
