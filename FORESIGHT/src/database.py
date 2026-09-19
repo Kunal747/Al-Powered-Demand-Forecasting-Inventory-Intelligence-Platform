@@ -7,13 +7,7 @@ WHY : A relational database keeps sales history, inventory, forecasts, risk
       alerts and recommendations in one queryable place instead of loose
       CSV files, and is what the Streamlit dashboard reads from.
 HOW : Uses Python's built-in `sqlite3` so the whole project runs anywhere
-      with zero external setup (no server, no credentials). The schema
-      below is written in plain SQL that is also valid on MySQL -- see
-      docs/schema_mysql.sql for the MySQL version. Swapping to MySQL later
-      only means changing get_connection() to use mysql-connector-python
-      with the same table structure; nothing else in the pipeline changes.
-
-Run directly: python src/database.py
+      with zero external setup (no server, no credentials).
 """
 import sqlite3
 import pandas as pd
@@ -72,15 +66,45 @@ CREATE TABLE IF NOT EXISTS recommendations (
 
 
 def get_connection():
-    """Returns a DB connection. Swap this function's body for
-    mysql.connector.connect(...) to move to MySQL in production --
-    every other module only calls get_connection(), so nothing
-    elsewhere in the codebase needs to change."""
-    return sqlite3.connect(DB_PATH)
+    """Returns a DB connection and auto-initializes tables/data if missing (great for cloud deployment)."""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    
+    # Check if tables exist, if not initialize schema and load data automatically
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sales_history';")
+    table_exists = cursor.fetchone()
+    
+    if not table_exists:
+        conn.executescript(SCHEMA)
+        conn.commit()
+        _load_initial_data(conn)
+    else:
+        cursor.execute("SELECT COUNT(*) FROM sales_history;")
+        count = cursor.fetchone()[0]
+        if count == 0:
+            _load_initial_data(conn)
+            
+    return conn
+
+
+def _load_initial_data(conn):
+    if os.path.exists(CLEAN_CSV):
+        df = pd.read_csv(CLEAN_CSV)
+        df = df.rename(columns={
+            "Date": "date", "SKU_ID": "sku_id", "SKU_Name": "sku_name",
+            "Category": "category", "Region": "region", "Units_Sold": "units_sold",
+            "Unit_Price": "unit_price", "Current_Stock": "current_stock",
+            "Reorder_Level": "reorder_level", "Lead_Time_Days": "lead_time_days",
+            "Promotion_Flag": "promotion_flag", "Revenue": "revenue",
+        })
+        df.to_sql("sales_history", conn, if_exists="append", index=False)
+        conn.commit()
+        print("Initial sales history loaded automatically.")
 
 
 def init_schema():
-    conn = get_connection()
+    conn = sqlite3.connect(DB_PATH)
     conn.executescript(SCHEMA)
     conn.commit()
     conn.close()
@@ -97,7 +121,6 @@ def load_sales_history(csv_path: str = CLEAN_CSV):
         "Promotion_Flag": "promotion_flag", "Revenue": "revenue",
     })
     conn = get_connection()
-    # Replace-on-rerun so this script is safe to run multiple times (idempotent)
     conn.execute("DELETE FROM sales_history")
     df.to_sql("sales_history", conn, if_exists="append", index=False)
     conn.commit()
