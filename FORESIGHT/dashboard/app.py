@@ -32,10 +32,11 @@ chart_text = "#cbd5e1"
 chart_grid = "#223044"
 chart_template = "plotly_dark"
 
-with open(os.path.join(os.path.dirname(__file__), "styles.css"), encoding="utf-8") as css_file:
-    base_css = css_file.read()
-
-st.markdown(f"<style>{base_css}</style>", unsafe_allow_html=True)
+css_path = os.path.join(os.path.dirname(__file__), "styles.css")
+if os.path.exists(css_path):
+    with open(css_path, encoding="utf-8") as css_file:
+        base_css = css_file.read()
+    st.markdown(f"<style>{base_css}</style>", unsafe_allow_html=True)
 
 theme_css = f"""
 <style>
@@ -83,47 +84,6 @@ section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] p,
 section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] span,
 section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] label {{
     color: {"#f8fafc" if is_dark else "#1e293b"} !important;
-}}
-section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"] {{
-    border: 2px solid {"#f8fafc" if is_dark else "#334155"} !important;
-    background: {"#f8fafc" if is_dark else "#334155"} !important;
-}}
-section[data-testid="stSidebar"] [role="radio"] input {{
-    accent-color: #334155 !important;
-}}
-section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"],
-section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"] > div,
-section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"]::before,
-section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"]::after {{
-    border-color: #334155 !important;
-    background-color: #334155 !important;
-    box-shadow: none !important;
-}}
-section[data-testid="stSidebar"] [role="radio"][aria-checked="true"] [data-baseweb="radio"] > div::after {{
-    background-color: #ffffff !important;
-}}
-section[data-testid="stSidebar"] [data-baseweb="tag"] {{
-    background: #334155 !important;
-    border-color: #334155 !important;
-    color: #ffffff !important;
-}}
-section[data-testid="stSidebar"] [data-baseweb="tag"] * {{
-    color: #ffffff !important;
-}}
-input[type="radio"] {{
-    accent-color: #334155 !important;
-}}
-label[data-baseweb="radio"] input:checked,
-div[data-baseweb="radio"] input:checked {{
-    accent-color: #334155 !important;
-}}
-[data-baseweb="tag"],
-[data-baseweb="tag"] > span,
-[data-baseweb="tag"] svg {{
-    background-color: #334155 !important;
-    border-color: #334155 !important;
-    color: #ffffff !important;
-    fill: #ffffff !important;
 }}
 section[data-testid="stSidebar"] .stCaption,
 section[data-testid="stSidebar"] .stMarkdown,
@@ -182,12 +142,6 @@ div[data-testid="stButton"] button {{
     color: {"#f8fafc" if is_dark else "#0f172a"};
     font-size: 0.9rem;
 }}
-
-@media (max-width: 1050px) {{
-    section[data-testid="stSidebar"] {{
-        margin-right: 12px !important;
-    }}
-}}
 </style>
 """
 st.markdown(theme_css, unsafe_allow_html=True)
@@ -195,25 +149,32 @@ st.markdown(theme_css, unsafe_allow_html=True)
 
 @st.cache_data(ttl=60)
 def load_data():
-    conn = get_connection()
-    sales = pd.read_sql("SELECT * FROM sales_history", conn)
-    forecast = pd.read_sql("SELECT * FROM forecast_results", conn)
-    risk = pd.read_sql("SELECT * FROM risk_alerts", conn)
-    reco = pd.read_sql("SELECT * FROM recommendations", conn)
-    conn.close()
-    sales["date"] = pd.to_datetime(sales["date"])
-    forecast["forecast_date"] = pd.to_datetime(forecast["forecast_date"])
-    return sales, forecast, risk, reco
+    try:
+        conn = get_connection()
+        sales = pd.read_sql("SELECT * FROM sales_history", conn)
+        forecast = pd.read_sql("SELECT * FROM forecast_results", conn)
+        risk = pd.read_sql("SELECT * FROM risk_alerts", conn)
+        reco = pd.read_sql("SELECT * FROM recommendations", conn)
+        conn.close()
+        
+        if not sales.empty and "date" in sales.columns:
+            sales["date"] = pd.to_datetime(sales["date"])
+        if not forecast.empty and "forecast_date" in forecast.columns:
+            forecast["forecast_date"] = pd.to_datetime(forecast["forecast_date"])
+            
+        return sales, forecast, risk, reco
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
 sales, forecast, risk, reco = load_data()
 
 if sales.empty:
-    st.warning("No data found. Run pipeline first.")
+    st.warning("⚠️ Database tables are missing or empty. Please ensure `src/database.py` has run and populated data.")
     st.stop()
 
 # ---------------- Sidebar controls ----------------
-sku_list = sorted(sales["sku_id"].unique())
+sku_list = sorted(sales["sku_id"].unique()) if "sku_id" in sales.columns else []
 with st.sidebar:
     st.markdown('<div class="brand-mark"><span class="brand-dot"></span>FORESIGHT</div>', unsafe_allow_html=True)
     st.caption("INVENTORY INTELLIGENCE OS")
@@ -226,10 +187,11 @@ with st.sidebar:
     st.divider()
     st.markdown("**View filters**")
     selected_sku = st.selectbox("Focus SKU", ["All SKUs"] + sku_list)
+    risk_types = sorted(risk["risk_type"].dropna().unique()) if not risk.empty and "risk_type" in risk.columns else []
     risk_filter = st.multiselect(
         "Risk status",
-        sorted(risk["risk_type"].dropna().unique()),
-        default=sorted(risk["risk_type"].dropna().unique())
+        risk_types,
+        default=risk_types
     )
     st.divider()
     st.caption("DATA REFRESH")
@@ -254,10 +216,10 @@ st.markdown('<div class="status-pill"><span></span>Pipeline healthy · Forecasts
 st.markdown('<div class="section-label">Portfolio pulse</div>', unsafe_allow_html=True)
 c1, c2, c3, c4 = st.columns(4)
 
-total_skus = sales["sku_id"].nunique()
-stockout_cnt = int((risk["risk_type"] == "Stockout").sum())
-overstock_cnt = int((risk["risk_type"] == "Overstock").sum())
-reorder_cnt = int((reco["recommended_reorder_qty"] > 0).sum())
+total_skus = sales["sku_id"].nunique() if not sales.empty and "sku_id" in sales.columns else 0
+stockout_cnt = int((risk["risk_type"] == "Stockout").sum()) if not risk.empty and "risk_type" in risk.columns else 0
+overstock_cnt = int((risk["risk_type"] == "Overstock").sum()) if not risk.empty and "risk_type" in risk.columns else 0
+reorder_cnt = int((reco["recommended_reorder_qty"] > 0).sum()) if not reco.empty and "recommended_reorder_qty" in reco.columns else 0
 
 with c1:
     st.markdown(f'<div class="kpi-card"><div class="kpi-label">Active SKUs</div><div class="kpi-value">{total_skus}</div><div class="kpi-note accent">Tracked portfolio</div></div>', unsafe_allow_html=True)
@@ -278,14 +240,17 @@ if nav == "Overview" or nav == "Demand forecasts":
     with left_col:
         with st.container(border=True):
             st.subheader("Demand & forecast trend")
-            chart_sku = selected_sku if selected_sku != "All SKUs" else sku_list[0]
+            chart_sku = selected_sku if selected_sku != "All SKUs" and sku_list else (sku_list[0] if sku_list else "")
 
-            hist = sales[sales["sku_id"] == chart_sku].sort_values("date")
-            fc = forecast[forecast["sku_id"] == chart_sku].sort_values("forecast_date")
+            hist = sales[sales["sku_id"] == chart_sku].sort_values("date") if not sales.empty and chart_sku else pd.DataFrame()
+            fc = forecast[forecast["sku_id"] == chart_sku].sort_values("forecast_date") if not forecast.empty and chart_sku else pd.DataFrame()
 
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=hist["date"], y=hist["units_sold"], mode="lines", name="Historical sales", line=dict(color="#56d9d0", width=2)))
-            fig.add_trace(go.Scatter(x=fc["forecast_date"], y=fc["forecasted_units"], mode="lines+markers", name="8-week forecast", line=dict(color="#f4b860", width=2, dash="dash")))
+            if not hist.empty:
+                fig.add_trace(go.Scatter(x=hist["date"], y=hist["units_sold"], mode="lines", name="Historical sales", line=dict(color="#56d9d0", width=2)))
+            if not fc.empty:
+                fig.add_trace(go.Scatter(x=fc["forecast_date"], y=fc["forecasted_units"], mode="lines+markers", name="8-week forecast", line=dict(color="#f4b860", width=2, dash="dash")))
+            
             fig.update_layout(template=chart_template, paper_bgcolor=chart_background, plot_bgcolor=chart_background, height=380, margin=dict(l=8, r=8, t=20, b=8), legend=dict(orientation="h", y=1.08, x=0), font=dict(color=chart_text), xaxis=dict(showgrid=False), yaxis=dict(gridcolor=chart_grid))
             st.plotly_chart(fig, use_container_width=True)
 
@@ -296,7 +261,7 @@ if nav == "Overview" or nav == "Demand forecasts":
             gauge_fig.update_layout(paper_bgcolor=chart_background, height=200, margin=dict(l=20, r=20, t=8, b=8))
             st.plotly_chart(gauge_fig, use_container_width=True)
 
-        sku_risk = risk[risk["sku_id"] == chart_sku].iloc[0] if not risk[risk["sku_id"] == chart_sku].empty else None
+        sku_risk = risk[risk["sku_id"] == chart_sku].iloc[0] if not risk.empty and not risk[risk["sku_id"] == chart_sku].empty else None
         if sku_risk is not None:
             with st.container(border=True):
                 st.subheader(f"{chart_sku} signal")
@@ -306,20 +271,23 @@ if nav == "Overview" or nav == "Demand forecasts":
 elif nav == "Risk center":
     st.markdown('<div class="section-label">Exception management</div>', unsafe_allow_html=True)
     st.subheader("Inventory risk breakdown")
-    risk_display = risk.merge(reco[["sku_id", "recommended_reorder_qty"]], on="sku_id", how="left")
-    risk_display = risk_display[risk_display["risk_type"].isin(risk_filter)]
-    if selected_sku != "All SKUs":
+    risk_display = risk.merge(reco[["sku_id", "recommended_reorder_qty"]], on="sku_id", how="left") if not risk.empty and not reco.empty else risk.copy()
+    if not risk_display.empty and "risk_type" in risk_display.columns:
+        risk_display = risk_display[risk_display["risk_type"].isin(risk_filter)]
+    if selected_sku != "All SKUs" and not risk_display.empty:
         risk_display = risk_display[risk_display["sku_id"] == selected_sku]
-    risk_display = risk_display[["sku_id", "risk_type", "risk_level", "current_stock",
-                                  "forecasted_demand", "recommended_reorder_qty"]]
+    
+    cols_to_show = [c for c in ["sku_id", "risk_type", "risk_level", "current_stock", "forecasted_demand", "recommended_reorder_qty"] if c in risk_display.columns]
+    risk_display = risk_display[cols_to_show] if not risk_display.empty else risk_display
+    
     with st.container(border=True):
         st.dataframe(risk_display, use_container_width=True, height=450, hide_index=True)
 
 elif nav == "Model performance":
     st.markdown('<div class="section-label">Quality monitor</div>', unsafe_allow_html=True)
     st.subheader("Forecast validation metrics")
-    acc = forecast[["sku_id", "model_used", "mae", "rmse"]].drop_duplicates("sku_id").sort_values("mae")
-    if selected_sku != "All SKUs":
+    acc = forecast[["sku_id", "model_used", "mae", "rmse"]].drop_duplicates("sku_id").sort_values("mae") if not forecast.empty else pd.DataFrame()
+    if selected_sku != "All SKUs" and not acc.empty:
         acc = acc[acc["sku_id"] == selected_sku]
     with st.container(border=True):
         st.dataframe(acc, use_container_width=True, height=450, hide_index=True)
